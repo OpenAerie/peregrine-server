@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -21,46 +22,17 @@ func main() {
 	var auth = "PVEAPIToken=" + os.Getenv("PV_TOKEN") + "=" + os.Getenv("PV_SECRET")
 	var base_url = "https://" + os.Getenv("PV_HOST")
 	nodeName := getNodeName(auth, base_url)
-	var cur_vm_url = "api2/json/nodes/" + nodeName + "/qemu/"
-	// getProxUrl(auth, base_url, cur_vm_url)
-	// searchVMID(auth, base_url, cur_vm_url)
-	fmt.Println(getVMID(auth, base_url, cur_vm_url, "avorion"))
-	// client := &http.Client{}
-	// http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	// req, err := http.NewRequest("GET", base_url+"api2/json/nodes/tpdev-pv01/qemu/", nil)
-	// req.Header.Set("Authorization", auth)
-	// req.Header.Set("Accept", "application/json")
-	// if err != nil {
-	// 	fmt.Print(err.Error())
-	// 	os.Exit(1)
-	// }
-	// response, err := client.Do(req)
-	// if err != nil {
-	// 	fmt.Print(err.Error())
-	// 	os.Exit(1)
-	// }
-	// defer response.Body.Close()
-
-	// body, err := io.ReadAll(response.Body)
-	// if err != nil {
-	// 	fmt.Print(err.Error())
-	// 	os.Exit(1)
-	// }
-	// // This Looks for Avorion server and attemps to start it.
-	// var stuff map[string]interface{}
-	// err = json.Unmarshal([]byte(body), &stuff)
-	// if err != nil {
-	// 	fmt.Println("Error", err)
-	// }
-	// if stuff["data"].(map[string]interface{})["name"] == "avorion" {
-	// 	vmid := stuff["data"].(map[string]interface{})["vmid"]
-	// 	fmt.Println(vmid)
-	// }
-	// if stuff["data"].(map[string]interface{})["status"] != "running" {
-	// 	fmt.Println("VM is stopped")
-	// 	fmt.Println("Attempting to start VM")
-	// 	startVM(auth, base_url)
-	// }
+	var cur_qemu_url = base_url + "api2/json/nodes/" + nodeName + "/qemu/"
+	// getProxUrl(auth, cur_qemu_url)
+	vmID := getVMID(auth, cur_qemu_url, "avorion")
+	if vmID != "0" {
+		fmt.Println("Attempting to start VM")
+		response, err := startVM(auth, cur_qemu_url, vmID)
+		if err != nil {
+			fmt.Println("Error", err)
+		}
+		fmt.Println(response)
+	}
 }
 
 func getNodeName(auth string, base_url string) string {
@@ -85,11 +57,7 @@ func getNodeName(auth string, base_url string) string {
 		fmt.Print(err.Error())
 		os.Exit(1)
 	}
-	// dst := &bytes.Buffer{}
-	// if err := json.Indent(dst, body, "", "  "); err != nil {
-	// 	panic(err)
-	// }
-	// fmt.Println("Node Name:", dst)
+
 	var nodename map[string]interface{}
 	err = json.Unmarshal([]byte(body), &nodename)
 	if err != nil {
@@ -99,69 +67,10 @@ func getNodeName(auth string, base_url string) string {
 	return nodeName.(string)
 }
 
-// func getProxUrl(auth string, base_url string, ext_url string) {
-// 	client := &http.Client{}
-// 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-// 	req, err := http.NewRequest("GET", base_url+ext_url, nil)
-// 	req.Header.Set("Authorization", auth)
-// 	req.Header.Set("Accept", "application/json")
-// 	if err != nil {
-// 		fmt.Print(err.Error())
-// 		os.Exit(1)
-// 	}
-// 	response, err := client.Do(req)
-// 	if err != nil {
-// 		fmt.Print(err.Error())
-// 		os.Exit(1)
-// 	}
-// 	defer response.Body.Close()
-
-// 	body, err := io.ReadAll(response.Body)
-// 	if err != nil {
-// 		fmt.Print(err.Error())
-// 		os.Exit(1)
-// 	}
-// 	dst := &bytes.Buffer{}
-// 	if err := json.Indent(dst, body, "", "  "); err != nil {
-// 		panic(err)
-// 	}
-// 	fmt.Println(dst)
-// }
-
-// func startVM(auth string, base_url string) {
-// 	client := &http.Client{}
-// 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-// 	req, err := http.NewRequest("POST", base_url+"api2/json/nodes/tpdev-pv01/qemu/109/status/start", nil)
-// 	req.Header.Set("Authorization", auth)
-// 	req.Header.Set("Accept", "application/json")
-// 	if err != nil {
-// 		fmt.Print(err.Error())
-// 		os.Exit(1)
-// 	}
-// 	response, err := client.Do(req)
-// 	if err != nil {
-// 		fmt.Print(err.Error())
-// 		os.Exit(1)
-// 	}
-// 	defer response.Body.Close()
-
-// 	body, err := io.ReadAll(response.Body)
-// 	if err != nil {
-// 		fmt.Print(err.Error())
-// 		os.Exit(1)
-// 	}
-// 	dst := &bytes.Buffer{}
-// 	if err := json.Indent(dst, body, "", "  "); err != nil {
-// 		panic(err)
-// 	}
-// 	fmt.Println(dst)
-// }
-
-// Iterate over the json and get the "vmid" of the vm based on the "name"
-func getVMID(auth string, base_url string, ext_url string, vmname string) float64 {
+func getProxUrl(auth, cur_qemu_url string) {
 	client := &http.Client{}
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	req, err := http.NewRequest("GET", base_url+ext_url, nil)
+	req, err := http.NewRequest("GET", cur_qemu_url, nil)
 	req.Header.Set("Authorization", auth)
 	req.Header.Set("Accept", "application/json")
 	if err != nil {
@@ -180,11 +89,131 @@ func getVMID(auth string, base_url string, ext_url string, vmname string) float6
 		fmt.Print(err.Error())
 		os.Exit(1)
 	}
-	// dst := &bytes.Buffer{}
-	// if err := json.Indent(dst, body, "", "  "); err != nil {
-	// 	panic(err)
-	// }
-	// fmt.Println("Node Name:", dst)
+	dst := &bytes.Buffer{}
+	if err := json.Indent(dst, body, "", "  "); err != nil {
+		panic(err)
+	}
+	fmt.Println(dst)
+}
+
+func startVM(auth string, cur_qemu_url string, vmID string) (string, error) {
+	check_if_running := getVMStatus(auth, cur_qemu_url, vmID)
+	if check_if_running == "stopped" {
+		client := &http.Client{}
+		http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+		req, err := http.NewRequest("POST", cur_qemu_url+vmID+"/status/start", nil)
+		req.Header.Set("Authorization", auth)
+		req.Header.Set("Accept", "application/json")
+		if err != nil {
+			fmt.Print(err.Error())
+			os.Exit(1)
+		}
+		response, err := client.Do(req)
+		if err != nil {
+			fmt.Print(err.Error())
+			os.Exit(1)
+		}
+		defer response.Body.Close()
+
+		body, err := io.ReadAll(response.Body)
+		if err != nil {
+			fmt.Print(err.Error())
+			os.Exit(1)
+		}
+		dst := &bytes.Buffer{}
+		if err := json.Indent(dst, body, "", "  "); err != nil {
+			panic(err)
+		}
+		return "Started VM " + vmID, nil
+	}
+	if check_if_running == "paused" {
+		client := &http.Client{}
+		http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+		req, err := http.NewRequest("POST", cur_qemu_url+vmID+"/status/resume", nil)
+		req.Header.Set("Authorization", auth)
+		req.Header.Set("Accept", "application/json")
+		if err != nil {
+			fmt.Print(err.Error())
+			os.Exit(1)
+		}
+		response, err := client.Do(req)
+		if err != nil {
+			fmt.Print(err.Error())
+			os.Exit(1)
+		}
+		defer response.Body.Close()
+
+		body, err := io.ReadAll(response.Body)
+		if err != nil {
+			fmt.Print(err.Error())
+			os.Exit(1)
+		}
+		dst := &bytes.Buffer{}
+		if err := json.Indent(dst, body, "", "  "); err != nil {
+			panic(err)
+		}
+		fmt.Println(dst)
+		return "Resumed VM " + vmID, nil
+	}
+
+	return "VM current state is: " + check_if_running, nil
+}
+
+func getVMStatus(auth, cur_qemu_url, vmID string) string {
+	client := &http.Client{}
+	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	req, err := http.NewRequest("GET", cur_qemu_url+vmID+"/status/current", nil)
+	req.Header.Set("Authorization", auth)
+	req.Header.Set("Accept", "application/json")
+	if err != nil {
+		fmt.Print(err.Error())
+		os.Exit(1)
+	}
+	response, err := client.Do(req)
+	if err != nil {
+		fmt.Print(err.Error())
+		os.Exit(1)
+	}
+	defer response.Body.Close()
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		fmt.Print(err.Error())
+		os.Exit(1)
+	}
+
+	var vmstatus map[string]interface{}
+	err = json.Unmarshal([]byte(body), &vmstatus)
+	if err != nil {
+		fmt.Println("Error", err)
+	}
+	vmStatus := vmstatus["data"].(map[string]interface{})["qmpstatus"]
+	return vmStatus.(string)
+}
+
+// Iterate over the json and get the "vmid" of the vm based on the "name"
+func getVMID(auth, cur_qemu_url, vmname string) string {
+	client := &http.Client{}
+	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	req, err := http.NewRequest("GET", cur_qemu_url, nil)
+	req.Header.Set("Authorization", auth)
+	req.Header.Set("Accept", "application/json")
+	if err != nil {
+		fmt.Print(err.Error())
+		os.Exit(1)
+	}
+	response, err := client.Do(req)
+	if err != nil {
+		fmt.Print(err.Error())
+		os.Exit(1)
+	}
+	defer response.Body.Close()
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		fmt.Print(err.Error())
+		os.Exit(1)
+	}
 	var vmlist map[string]interface{}
 	err = json.Unmarshal([]byte(body), &vmlist)
 	if err != nil {
@@ -193,8 +222,8 @@ func getVMID(auth string, base_url string, ext_url string, vmname string) float6
 	for _, vm := range vmlist["data"].([]interface{}) {
 
 		if vm.(map[string]interface{})["name"] == vmname {
-			return vm.(map[string]interface{})["vmid"].(float64)
+			return fmt.Sprint(vm.(map[string]interface{})["vmid"].(float64))
 		}
 	}
-	return 0
+	return "0"
 }
