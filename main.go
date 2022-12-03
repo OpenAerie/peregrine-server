@@ -20,7 +20,7 @@ func main() {
 	}
 
 	var auth = "PVEAPIToken=" + os.Getenv("PV_TOKEN") + "=" + os.Getenv("PV_SECRET")
-	var baseUrl = "https://" + os.Getenv("PV_HOST")
+	var baseUrl = "https://" + os.Getenv("PV_HOST") + "/"
 	nodeName := getNodeName(auth, baseUrl)
 	var qemuUrl = baseUrl + "api2/json/nodes/" + nodeName + "/qemu/"
 	// getProxUrl(auth, qemuUrl)

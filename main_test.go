@@ -35,7 +35,7 @@ func Test_getNodeName(t *testing.T) {
 		args args
 		want string
 	}{
-		{"tpdev-pv01", args{"PVEAPIToken=" + os.Getenv("PV_TOKEN") + "=" + os.Getenv("PV_SECRET"), "https://" + os.Getenv("PV_HOST")}, "tpdev-pv01"},
+		{"tpdev-pv01", args{"PVEAPIToken=" + os.Getenv("PV_TOKEN") + "=" + os.Getenv("PV_SECRET"), "https://" + os.Getenv("PV_HOST") + "/"}, "tpdev-pv01"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
