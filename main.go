@@ -23,8 +23,9 @@ func main() {
 	var baseUrl = "https://" + os.Getenv("PV_HOST") + "/"
 	nodeName := getNodeName(auth, baseUrl)
 	var qemuUrl = baseUrl + "api2/json/nodes/" + nodeName + "/qemu/"
-	// getProxUrl(auth, qemuUrl)
-	vmID := getVMID(auth, qemuUrl, "avorion")
+	//getProxUrl(auth, qemuUrl)
+	vmName := "avorion"
+	vmID := getVMID(auth, qemuUrl, vmName)
 	if vmID != "0" {
 		fmt.Println("Attempting to start VM")
 		response, err := startVM(auth, qemuUrl, vmID)
@@ -33,6 +34,7 @@ func main() {
 		}
 		fmt.Println(response)
 	}
+	// pauseAllVMs(auth, qemuUrl)
 }
 
 func getNodeName(auth string, baseUrl string) string {
@@ -217,4 +219,65 @@ func getVMID(auth, qemuUrl, vmname string) string {
 		}
 	}
 	return "0"
+}
+
+func pauseVM(auth, qemuUrl, vmID string) (string, error) {
+	client := &http.Client{}
+	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	req, err := http.NewRequest("POST", qemuUrl+vmID+"/status/suspend", nil)
+	req.Header.Set("Authorization", auth)
+	req.Header.Set("Accept", "application/json")
+	if err != nil {
+		fmt.Print(err.Error())
+		os.Exit(1)
+	}
+	response, err := client.Do(req)
+	if err != nil {
+		fmt.Print(err.Error())
+		os.Exit(1)
+	}
+	defer response.Body.Close()
+	return "VM " + vmID + " successfully paused\n", nil
+}
+
+func pauseAllVMs(auth, qemuUrl string) {
+	client := &http.Client{}
+	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	req, err := http.NewRequest("GET", qemuUrl, nil)
+	req.Header.Set("Authorization", auth)
+	req.Header.Set("Accept", "application/json")
+	if err != nil {
+		fmt.Print(err.Error())
+		os.Exit(1)
+	}
+	response, err := client.Do(req)
+	if err != nil {
+		fmt.Print(err.Error())
+		os.Exit(1)
+	}
+	defer response.Body.Close()
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		fmt.Print(err.Error())
+		os.Exit(1)
+	}
+
+	var vms map[string]interface{}
+	err = json.Unmarshal([]byte(body), &vms)
+	if err != nil {
+		fmt.Println("Error", err)
+	}
+	for _, vm := range vms["data"].([]interface{}) {
+		vmID := fmt.Sprint(vm.(map[string]interface{})["vmid"].(float64))
+		vmStatus := VMStatus(auth, qemuUrl, vmID)
+		if vmStatus == "running" {
+			fmt.Println("Attempting to pause VM", vmID)
+			response, err := pauseVM(auth, qemuUrl, vmID)
+			if err != nil {
+				fmt.Println("Error", err)
+			}
+			fmt.Println(response)
+		}
+	}
 }
