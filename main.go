@@ -14,16 +14,19 @@ import (
 )
 
 func main() {
+	// Load the .env file
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatalf("Some error occured. Err: %s", err)
 	}
 
+	// Get the values from the .env file
 	var auth = "PVEAPIToken=" + os.Getenv("PV_TOKEN") + "=" + os.Getenv("PV_SECRET")
 	var baseUrl = "https://" + os.Getenv("PV_HOST") + "/"
 	nodeName := getNodeName(auth, baseUrl)
 	var qemuUrl = baseUrl + "api2/json/nodes/" + nodeName + "/qemu/"
-	//getProxUrl(auth, qemuUrl)
+
+	getProxUrl(auth, qemuUrl)
 	vmName := "avorion"
 	vmID := getVMID(auth, qemuUrl, vmName)
 	if vmID != "0" {
@@ -34,13 +37,13 @@ func main() {
 		}
 		fmt.Println(response)
 	}
-	// pauseAllVMs(auth, qemuUrl)
+	pauseAllVMs(auth, qemuUrl)
 }
 
-func getNodeName(auth string, baseUrl string) string {
+func httpReq(reqType, auth, url string) ([]byte, error) {
 	client := &http.Client{}
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	req, err := http.NewRequest("GET", baseUrl+"api2/json/nodes/", nil)
+	req, err := http.NewRequest(reqType, url, nil)
 	req.Header.Set("Authorization", auth)
 	req.Header.Set("Accept", "application/json")
 	if err != nil {
@@ -53,8 +56,17 @@ func getNodeName(auth string, baseUrl string) string {
 		os.Exit(1)
 	}
 	defer response.Body.Close()
-
 	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		fmt.Print(err.Error())
+		os.Exit(1)
+	}
+
+	return body, err
+}
+
+func getNodeName(auth string, baseUrl string) string {
+	body, err := httpReq("GET", auth, baseUrl+"api2/json/nodes/")
 	if err != nil {
 		fmt.Print(err.Error())
 		os.Exit(1)
@@ -70,23 +82,7 @@ func getNodeName(auth string, baseUrl string) string {
 }
 
 func getProxUrl(auth, qemuUrl string) {
-	client := &http.Client{}
-	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	req, err := http.NewRequest("GET", qemuUrl, nil)
-	req.Header.Set("Authorization", auth)
-	req.Header.Set("Accept", "application/json")
-	if err != nil {
-		fmt.Print(err.Error())
-		os.Exit(1)
-	}
-	response, err := client.Do(req)
-	if err != nil {
-		fmt.Print(err.Error())
-		os.Exit(1)
-	}
-	defer response.Body.Close()
-
-	body, err := io.ReadAll(response.Body)
+	body, err := httpReq("GET", auth, qemuUrl)
 	if err != nil {
 		fmt.Print(err.Error())
 		os.Exit(1)
@@ -101,49 +97,11 @@ func getProxUrl(auth, qemuUrl string) {
 func startVM(auth string, qemuUrl string, vmID string) (string, error) {
 	checkStatus := VMStatus(auth, qemuUrl, vmID)
 	if checkStatus == "stopped" {
-		client := &http.Client{}
-		http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-		req, err := http.NewRequest("POST", qemuUrl+vmID+"/status/start", nil)
-		req.Header.Set("Authorization", auth)
-		req.Header.Set("Accept", "application/json")
-		if err != nil {
-			fmt.Print(err.Error())
-			os.Exit(1)
-		}
-		response, err := client.Do(req)
-		if err != nil {
-			fmt.Print(err.Error())
-			os.Exit(1)
-		}
-		defer response.Body.Close()
-
-		body, err := io.ReadAll(response.Body)
-		if err != nil {
-			fmt.Print(err.Error())
-			os.Exit(1)
-		}
-		dst := &bytes.Buffer{}
-		if err := json.Indent(dst, body, "", "  "); err != nil {
-			panic(err)
-		}
+		httpReq("POST", auth, qemuUrl+vmID+"/status/start")
 		return "Started VM " + vmID, nil
 	}
 	if checkStatus == "paused" {
-		client := &http.Client{}
-		http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-		req, err := http.NewRequest("POST", qemuUrl+vmID+"/status/resume", nil)
-		req.Header.Set("Authorization", auth)
-		req.Header.Set("Accept", "application/json")
-		if err != nil {
-			fmt.Print(err.Error())
-			os.Exit(1)
-		}
-		response, err := client.Do(req)
-		if err != nil {
-			fmt.Print(err.Error())
-			os.Exit(1)
-		}
-		defer response.Body.Close()
+		httpReq("POST", auth, qemuUrl+vmID+"/status/resume")
 		return "Resumed VM " + vmID, nil
 	}
 	if checkStatus == "running" {
@@ -153,23 +111,7 @@ func startVM(auth string, qemuUrl string, vmID string) (string, error) {
 }
 
 func VMStatus(auth, qemuUrl, vmID string) string {
-	client := &http.Client{}
-	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	req, err := http.NewRequest("GET", qemuUrl+vmID+"/status/current", nil)
-	req.Header.Set("Authorization", auth)
-	req.Header.Set("Accept", "application/json")
-	if err != nil {
-		fmt.Print(err.Error())
-		os.Exit(1)
-	}
-	response, err := client.Do(req)
-	if err != nil {
-		fmt.Print(err.Error())
-		os.Exit(1)
-	}
-	defer response.Body.Close()
-
-	body, err := io.ReadAll(response.Body)
+	body, err := httpReq("GET", auth, qemuUrl+vmID+"/status/current")
 	if err != nil {
 		fmt.Print(err.Error())
 		os.Exit(1)
@@ -186,23 +128,7 @@ func VMStatus(auth, qemuUrl, vmID string) string {
 
 // Iterate over the json and get the "vmid" of the vm based on the "name"
 func getVMID(auth, qemuUrl, vmname string) string {
-	client := &http.Client{}
-	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	req, err := http.NewRequest("GET", qemuUrl, nil)
-	req.Header.Set("Authorization", auth)
-	req.Header.Set("Accept", "application/json")
-	if err != nil {
-		fmt.Print(err.Error())
-		os.Exit(1)
-	}
-	response, err := client.Do(req)
-	if err != nil {
-		fmt.Print(err.Error())
-		os.Exit(1)
-	}
-	defer response.Body.Close()
-
-	body, err := io.ReadAll(response.Body)
+	body, err := httpReq("GET", auth, qemuUrl)
 	if err != nil {
 		fmt.Print(err.Error())
 		os.Exit(1)
@@ -222,42 +148,12 @@ func getVMID(auth, qemuUrl, vmname string) string {
 }
 
 func pauseVM(auth, qemuUrl, vmID string) (string, error) {
-	client := &http.Client{}
-	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	req, err := http.NewRequest("POST", qemuUrl+vmID+"/status/suspend", nil)
-	req.Header.Set("Authorization", auth)
-	req.Header.Set("Accept", "application/json")
-	if err != nil {
-		fmt.Print(err.Error())
-		os.Exit(1)
-	}
-	response, err := client.Do(req)
-	if err != nil {
-		fmt.Print(err.Error())
-		os.Exit(1)
-	}
-	defer response.Body.Close()
+	httpReq("POST", auth, qemuUrl+vmID+"/status/suspend")
 	return "VM " + vmID + " successfully paused\n", nil
 }
 
 func pauseAllVMs(auth, qemuUrl string) {
-	client := &http.Client{}
-	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	req, err := http.NewRequest("GET", qemuUrl, nil)
-	req.Header.Set("Authorization", auth)
-	req.Header.Set("Accept", "application/json")
-	if err != nil {
-		fmt.Print(err.Error())
-		os.Exit(1)
-	}
-	response, err := client.Do(req)
-	if err != nil {
-		fmt.Print(err.Error())
-		os.Exit(1)
-	}
-	defer response.Body.Close()
-
-	body, err := io.ReadAll(response.Body)
+	body, err := httpReq("GET", auth, qemuUrl)
 	if err != nil {
 		fmt.Print(err.Error())
 		os.Exit(1)
