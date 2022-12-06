@@ -8,13 +8,24 @@ import (
 	"io"
 	"net/http"
 	"os"
+
+	"github.com/topritchett/game-server/config"
 )
 
-func HttpReq(reqType, auth, url string) ([]byte, error) {
+var pvToken string = config.GoDotEnvVariable("PVE_TOKEN")
+var pvHost string = config.GoDotEnvVariable("PVE_HOST")
+var pvSecret string = config.GoDotEnvVariable("PVE_SECRET")
+var Auth = "PVEAPIToken=" + pvToken + "=" + pvSecret
+var BaseUrl = "https://" + pvHost + "/"
+
+var NodeName = GetNodeName(Auth, BaseUrl)
+var QemuUrl = BaseUrl + "api2/json/nodes/" + NodeName + "/qemu/"
+
+func HttpReq(reqType, Auth, BaseUrl string) ([]byte, error) {
 	client := &http.Client{}
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	req, err := http.NewRequest(reqType, url, nil)
-	req.Header.Set("Authorization", auth)
+	req, err := http.NewRequest(reqType, BaseUrl, nil)
+	req.Header.Set("Authorization", Auth)
 	req.Header.Set("Accept", "application/json")
 	if err != nil {
 		fmt.Print(err.Error())
@@ -35,8 +46,8 @@ func HttpReq(reqType, auth, url string) ([]byte, error) {
 	return body, err
 }
 
-func GetNodeName(auth string, baseUrl string) string {
-	body, err := HttpReq("GET", auth, baseUrl+"api2/json/nodes/")
+func GetNodeName(Auth, BaseUrl string) string {
+	body, err := HttpReq("GET", Auth, BaseUrl+"api2/json/nodes/")
 	if err != nil {
 		fmt.Print(err.Error())
 		os.Exit(1)
@@ -51,8 +62,8 @@ func GetNodeName(auth string, baseUrl string) string {
 	return nodeName.(string)
 }
 
-func GetProxUrl(auth, qemuUrl string) string {
-	body, err := HttpReq("GET", auth, qemuUrl)
+func GetProxUrl(Auth, QemuUrl string) string {
+	body, err := HttpReq("GET", Auth, QemuUrl)
 	if err != nil {
 		fmt.Print(err.Error())
 		os.Exit(1)
@@ -64,14 +75,14 @@ func GetProxUrl(auth, qemuUrl string) string {
 	return dst.String()
 }
 
-func StartVM(auth string, qemuUrl string, vmID string) (string, error) {
-	checkStatus := VMStatus(auth, qemuUrl, vmID)
+func StartVM(Auth string, QemuUrl string, vmID string) (string, error) {
+	checkStatus := VMStatus(Auth, QemuUrl, vmID)
 	if checkStatus == "stopped" {
-		HttpReq("POST", auth, qemuUrl+vmID+"/status/start")
+		HttpReq("POST", Auth, QemuUrl+vmID+"/status/start")
 		return "Started VM " + vmID, nil
 	}
 	if checkStatus == "paused" {
-		HttpReq("POST", auth, qemuUrl+vmID+"/status/resume")
+		HttpReq("POST", Auth, QemuUrl+vmID+"/status/resume")
 		return "Resumed VM " + vmID, nil
 	}
 	if checkStatus == "running" {
@@ -80,8 +91,8 @@ func StartVM(auth string, qemuUrl string, vmID string) (string, error) {
 	return "VM current state is: " + checkStatus, nil
 }
 
-func VMStatus(auth, qemuUrl, vmID string) string {
-	body, err := HttpReq("GET", auth, qemuUrl+vmID+"/status/current")
+func VMStatus(Auth, QemuUrl, vmID string) string {
+	body, err := HttpReq("GET", Auth, QemuUrl+vmID+"/status/current")
 	if err != nil {
 		fmt.Print(err.Error())
 		os.Exit(1)
@@ -97,8 +108,8 @@ func VMStatus(auth, qemuUrl, vmID string) string {
 }
 
 // Iterate over the json and get the "vmid" of the vm based on the "name"
-func GetVMID(auth, qemuUrl, vmname string) string {
-	body, err := HttpReq("GET", auth, qemuUrl)
+func GetVMID(Auth, QemuUrl, vmname string) string {
+	body, err := HttpReq("GET", Auth, QemuUrl)
 	if err != nil {
 		fmt.Print(err.Error())
 		os.Exit(1)
@@ -117,13 +128,13 @@ func GetVMID(auth, qemuUrl, vmname string) string {
 	return "0"
 }
 
-func PauseVM(auth, qemuUrl, vmID string) (string, error) {
-	HttpReq("POST", auth, qemuUrl+vmID+"/status/suspend")
+func PauseVM(Auth, QemuUrl, vmID string) (string, error) {
+	HttpReq("POST", Auth, QemuUrl+vmID+"/status/suspend")
 	return "VM " + vmID + " successfully paused\n", nil
 }
 
-func PauseAllVMs(auth, qemuUrl string) {
-	body, err := HttpReq("GET", auth, qemuUrl)
+func PauseAllVMs(Auth, QemuUrl string) {
+	body, err := HttpReq("GET", Auth, QemuUrl)
 	if err != nil {
 		fmt.Print(err.Error())
 		os.Exit(1)
@@ -136,10 +147,10 @@ func PauseAllVMs(auth, qemuUrl string) {
 	}
 	for _, vm := range vms["data"].([]interface{}) {
 		vmID := fmt.Sprint(vm.(map[string]interface{})["vmid"].(float64))
-		vmStatus := VMStatus(auth, qemuUrl, vmID)
+		vmStatus := VMStatus(Auth, QemuUrl, vmID)
 		if vmStatus == "running" {
 			fmt.Println("Attempting to pause VM", vmID)
-			response, err := PauseVM(auth, qemuUrl, vmID)
+			response, err := PauseVM(Auth, QemuUrl, vmID)
 			if err != nil {
 				fmt.Println("Error", err)
 			}
